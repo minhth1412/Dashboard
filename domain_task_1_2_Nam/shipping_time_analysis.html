@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Average Shipping Time by Month</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <style>
+      .bar {
+        fill: steelblue;
+      }
+      .bar:hover {
+        fill: orange;
+      }
+      .axis-label {
+        font-size: 14px;
+      }
+      .axis text {
+        font-size: 12px;
+      }
+      #chart-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      #chart {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .chart-title {
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chart-container">
+      <div class="chart-title">
+        Thời gian giao hàng trung bình theo tháng trong nửa đầu năm 2015 ở Mỹ
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <script>
+      // Đường dẫn tới file Excel
+      const excelFilePath = "./SuperStoreUS-2015.xlsx";
+
+      // Hàm để tải file Excel
+      async function loadExcelFile(filePath) {
+        const response = await fetch(filePath);
+        const data = await response.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+        return workbook;
+      }
+
+      // Xử lý dữ liệu từ file Excel
+      function processData(workbook) {
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        // Chuyển đổi dữ liệu sang định dạng dễ xử lý
+        const orders = json.map((order) => ({
+          orderDate: new Date(
+            (order["Order Date"] - (25567 + 2)) * 86400 * 1000
+          ),
+          shipDate: new Date((order["Ship Date"] - (25567 + 2)) * 86400 * 1000),
+          shippingTime:
+            (new Date((order["Ship Date"] - (25567 + 2)) * 86400 * 1000) -
+              new Date((order["Order Date"] - (25567 + 2)) * 86400 * 1000)) /
+            (1000 * 60 * 60 * 24),
+        }));
+
+        // Tính thời gian giao hàng trung bình theo tháng
+        const shippingTimesByMonth = d3
+          .rollups(
+            orders,
+            (v) => d3.mean(v, (d) => d.shippingTime),
+            (d) => d3.timeFormat("%Y-%m")(d.orderDate)
+          )
+          .map(([month, avgShippingTime]) => ({
+            YearMonth: month,
+            "Shipping Time": avgShippingTime,
+          }));
+
+        // Sắp xếp theo tháng tăng dần
+        shippingTimesByMonth.sort(
+          (a, b) => new Date(a.YearMonth) - new Date(b.YearMonth)
+        );
+
+        return shippingTimesByMonth;
+      }
+
+      // Vẽ biểu đồ
+      function renderChart(data) {
+        // Kích thước biểu đồ
+        const margin = { top: 50, right: 50, bottom: 40, left: 70 },
+          width = 800 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
+
+        // Xóa biểu đồ cũ nếu có
+        d3.select("#chart").selectAll("*").remove();
+
+        // Tạo SVG container
+        const svg = d3
+          .select("#chart")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+          .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Thiết lập thang đo cho trục x và y
+        const x = d3
+          .scaleLinear()
+          .domain([0, d3.max(data, (d) => d["Shipping Time"])])
+          .nice()
+          .range([0, width]);
+
+        const y = d3
+          .scaleBand()
+          .domain(data.map((d) => d["YearMonth"].substring(5))) // Chỉ lấy tháng
+          .range([height, 0])
+          .padding(0.3);
+
+        // Tạo các thanh biểu đồ
+        svg
+          .selectAll(".bar")
+          .data(data)
+          .enter()
+          .append("rect")
+          .attr("class", "bar")
+          .attr("x", 0)
+          .attr("y", (d) => y(d["YearMonth"].substring(5)))
+          .attr("width", (d) => x(d["Shipping Time"]))
+          .attr("height", y.bandwidth());
+
+        // Thêm giá trị trên đầu mỗi cột
+        svg
+          .selectAll(".text")
+          .data(data)
+          .enter()
+          .append("text")
+          .attr("class", "label")
+          .attr("x", (d) => x(d["Shipping Time"]) + 3)
+          .attr("y", (d) => y(d["YearMonth"].substring(5)) + y.bandwidth() / 2)
+          .attr("dy", ".35em")
+          .attr("text-anchor", "start")
+          .text((d) => d["Shipping Time"].toFixed(2));
+
+        // Thêm trục x
+        svg
+          .append("g")
+          .attr("class", "x-axis")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(x))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("x", width / 2)
+          .attr("y", 35)
+          .attr("fill", "black")
+          .text("Thời gian giao hàng (ngày)");
+
+        // Thêm trục y
+        svg
+          .append("g")
+          .attr("class", "y-axis")
+          .call(d3.axisLeft(y))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("x", -height / 2)
+          .attr("y", -55)
+          .attr("transform", "rotate(-90)")
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .text("Tháng");
+      }
+
+      // Tải file Excel và vẽ biểu đồ
+      loadExcelFile(excelFilePath).then((workbook) => {
+        const data = processData(workbook);
+        renderChart(data);
+      });
+    </script>
+  </body>
+</html>

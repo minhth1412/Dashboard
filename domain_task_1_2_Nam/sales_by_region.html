@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales by Region</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <style>
+      .bar {
+        fill: steelblue;
+      }
+      .bar:hover {
+        fill: orange;
+      }
+      .axis-label {
+        font-size: 14px;
+      }
+      .axis text {
+        font-size: 12px;
+      }
+      #chart-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      #chart {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .chart-title {
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chart-container">
+      <div class="chart-title">
+        Doanh thu của việc bán hàng trực tuyến nửa năm đầu 2015 theo từng khu
+        vực ở Mỹ
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <script>
+      // Đường dẫn tới file Excel
+      const excelFilePath = "./SuperStoreUS-2015.xlsx";
+
+      // Hàm để tải file Excel
+      function loadExcelFile(filePath) {
+        return fetch(filePath)
+          .then((response) => response.arrayBuffer())
+          .then((data) => {
+            const workbook = XLSX.read(data, { type: "array" });
+            return workbook;
+          });
+      }
+
+      // Xử lý dữ liệu từ file Excel
+      function processData(data) {
+        const regionSalesData = data.map((d) => ({
+          region: d.Region,
+          sales: +d.Sales,
+        }));
+
+        const salesByRegion = d3
+          .rollups(
+            regionSalesData,
+            (v) => d3.sum(v, (d) => d.sales),
+            (d) => d.region
+          )
+          .map((d) => ({ region: d[0], sales: d[1] }));
+
+        // Sắp xếp dữ liệu theo thứ tự tăng dần của doanh số
+        salesByRegion.sort((a, b) => d3.ascending(a.sales, b.sales));
+
+        renderChart(salesByRegion);
+      }
+
+      // Vẽ biểu đồ
+      function renderChart(data) {
+        // Kích thước biểu đồ
+        const margin = { top: 50, right: 50, bottom: 40, left: 70 },
+          width = 800 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
+
+        // Xóa biểu đồ cũ nếu có
+        d3.select("#chart").selectAll("*").remove();
+
+        // Tạo SVG container
+        const svg = d3
+          .select("#chart")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+          .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Thiết lập thang đo cho trục x và y
+        const x = d3
+          .scaleBand()
+          .domain(data.map((d) => d.region))
+          .range([0, width])
+          .padding(0.3); // Giảm giá trị padding để cột nhỏ hơn
+
+        const y = d3
+          .scaleLinear()
+          .domain([0, d3.max(data, (d) => d.sales)])
+          .nice()
+          .range([height, 0]);
+
+        // Tạo các thanh biểu đồ
+        svg
+          .selectAll(".bar")
+          .data(data)
+          .enter()
+          .append("rect")
+          .attr("class", "bar")
+          .attr("x", (d) => x(d.region))
+          .attr("y", (d) => y(d.sales))
+          .attr("width", x.bandwidth())
+          .attr("height", (d) => height - y(d.sales));
+
+        // Thêm giá trị trên đầu mỗi cột
+        svg
+          .selectAll(".text")
+          .data(data)
+          .enter()
+          .append("text")
+          .attr("class", "label")
+          .attr("x", (d) => x(d.region) + x.bandwidth() / 2)
+          .attr("y", (d) => y(d.sales) - 5)
+          .attr("dy", ".110em")
+          .attr("text-anchor", "middle")
+          .text((d) => Math.round(d.sales).toLocaleString());
+
+        // Thêm trục x
+        svg
+          .append("g")
+          .attr("class", "x-axis")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(x))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("x", width / 2)
+          .attr("y", 35)
+          .attr("fill", "black")
+          .text("Region");
+
+        // Thêm trục y
+        svg
+          .append("g")
+          .attr("class", "y-axis")
+          .call(d3.axisLeft(y))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("x", -height / 2)
+          .attr("y", -55)
+          .attr("transform", "rotate(-90)")
+          .attr("text-anchor", "middle")
+          .attr("fill", "black")
+          .text("Sales");
+      }
+
+      // Tải file Excel và vẽ biểu đồ
+      loadExcelFile(excelFilePath).then((workbook) => {
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        processData(jsonData);
+      });
+    </script>
+  </body>
+</html>
