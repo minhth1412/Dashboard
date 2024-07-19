@@ -1,0 +1,1 @@
+This folder can be run using IDE Visual Studio Code, with extension related to html, js and Live Server. Open each file html with live server to see the charts.

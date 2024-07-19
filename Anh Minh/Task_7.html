@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tổng lượng sản phẩm được đặt mua theo phân khúc khách hàng trong nửa năm đầu 2015</title>
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <style>
+        .bar {
+            stroke: #000;
+        }
+        .bar:hover {
+            fill: orange;
+        }
+        .x-axis path, .x-axis line,
+        .y-axis path, .y-axis line {
+            shape-rendering: crispEdges;
+        }
+        .x-axis text {
+            font-size: 12px;
+        }
+        .y-axis text {
+            font-size: 12px;
+        }
+        .legend {
+            font-size: 12px;
+        }
+        .legend rect {
+            stroke: #000;
+            stroke-width: 1px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Tổng lượng sản phẩm được đặt mua theo phân khúc khách hàng trong nửa năm đầu 2015</h2>
+    <div id="my_dataviz"></div>
+    <script>
+        // set the dimensions and margins of the graph
+        var margin = {top: 30, right: 150, bottom: 70, left: 50},
+            width = 1000 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+
+        // append the svg object to the body of the page
+        var svg = d3.select("#my_dataviz")
+          .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform",
+                  "translate(" + margin.left + "," + margin.top + ")");
+
+        // Parse the Data
+        d3.csv("data7.csv", function(data) {
+            // Convert the "Order Date" to month
+            var parseDate = d3.timeParse("%m/%d/%Y");
+            data.forEach(d => {
+                d['Order Date'] = parseDate(d['Order Date']).toLocaleString('default', { month: 'short' }) + ' 2015';
+                d['Quantity ordered new'] = +d['Quantity ordered new'];  // Convert Quantity ordered new to number
+            });
+
+            // List of subgroups (Customer Segments)
+            var subgroups = Array.from(new Set(data.map(d => d['Customer Segment'])));
+
+            var months = ["Jan 2015", "Feb 2015", "Mar 2015", "Apr 2015", "May 2015", "Jun 2015"];
+
+            // List of groups (Months)
+            var groups = Array.from(new Set(data.map(d => d['Order Date'])));
+            
+            // Sort the groups base on month order (Jan -> Jun)
+            groups.sort((a, b) => months.indexOf(a) - months.indexOf(b));
+
+            // Prepare data for the grouped bar chart
+            var dataPrepared = groups.map(month => {
+                let monthData = data.filter(d => d['Order Date'] === month);
+                let result = { 'Order Date': month };
+                subgroups.forEach(seg => {
+                    result[seg] = d3.sum(monthData.filter(d => d['Customer Segment'] === seg), d => d['Quantity ordered new']);
+                });
+                return result;
+            });
+
+            // Define scales
+            var x = d3.scaleBand()
+                .domain(groups)
+                .range([0, width])
+                .padding([0.2]);
+
+            var y = d3.scaleLinear()
+                .domain([
+                    d3.min(subgroups.flatMap(seg => dataPrepared.map(d => d[seg]))),
+                    d3.max(subgroups.flatMap(seg => dataPrepared.map(d => d[seg])))
+                ])
+                .nice()
+                .range([ height, 0 ]);
+
+            var xSubgroup = d3.scaleBand()
+                .domain(subgroups)
+                .range([0, x.bandwidth()])
+                .padding([0.1]);
+
+            var color = d3.scaleOrdinal()
+                .domain(subgroups)
+                .range(['#e41a1c', '#377eb8', '#4daf4a', '#C7EFCF']); 
+
+            // Add X axis
+            svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(x).tickSize(0))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+
+            // Add Y axis
+            svg.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(y).ticks(10))
+                .append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -50)
+                .attr("x", -height / 2)
+                .attr("dy", ".71em")
+                .style("text-anchor", "middle")
+                .text("Tổng Lợi Nhuận");
+                
+            svg.append("text")
+                .attr("transform", "rotate(-360)")
+                .attr("y", -margin.left +30)  // Changed value to position the text properly
+                .attr("x", 20)  // Position the text in the center of the y-axis
+                .attr("dy", ".71em")
+                .style("text-anchor", "middle")  // Center the text horizontally
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .text("Tổng lượng sản phẩm");
+            // Show the bars
+            svg.append("g")
+                .selectAll("g")
+                .data(dataPrepared)
+                .enter()
+                .append("g")
+                .attr("transform", d => `translate(${x(d['Order Date'])},0)`)
+                .selectAll("rect")
+                .data(d => subgroups.map(key => ({ key: key, value: d[key] })))
+                .enter()
+                .append("rect")
+                .attr("x", d => xSubgroup(d.key))
+                .attr("y", d => y(d.value))
+                .attr("width", xSubgroup.bandwidth())
+                .attr("height", d => height - y(d.value))
+                .attr("fill", d => color(d.key))
+                .attr("class", "bar");
+
+            // Add legend
+            var legend = svg.selectAll(".legend")
+                .data(subgroups)
+                .enter()
+                .append("g")
+                .attr("class", "legend")
+                .attr("transform", (d, i) => `translate(${width + 30},${i * 30})`);
+
+            legend.append("rect")
+                .attr("x", 0)
+                .attr("width", 15)
+                .attr("height", 15)
+                .attr("fill", d => color(d));
+
+            legend.append("text")
+                .attr("x", 20)
+                .attr("y", 12)
+                .text(d => d);
+
+            // Add title for the legend
+            svg.append("text")
+                .attr("x", width + 10)
+                .attr("y", -10)
+                .attr("text-anchor", "start")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .text("Phân khúc khách hàng");
+
+        });
+    </script>
+</body>
+</html>
