@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Product Performance Analysis</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+      }
+      #chart {
+        width: 1000px;
+        height: 600px;
+        margin: 0 auto;
+      }
+      .bar {
+        fill-opacity: 0.7;
+      }
+      .bar:hover {
+        fill-opacity: 1;
+      }
+      .axis-label {
+        font-size: 12px;
+        font-family: Arial, sans-serif;
+      }
+      .x-axis text {
+        font-size: 12px;
+        fill: black;
+      }
+      .y-axis text {
+        font-size: 12px;
+        fill: black;
+      }
+      .bar-label {
+        font-size: 10px;
+        fill: black;
+      }
+      .legend {
+        font-size: 12px;
+        font-family: Arial, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Product Performance Analysis</h1>
+    <div id="chart"></div>
+
+    <script>
+      const margin = { top: 50, right: 30, bottom: 150, left: 100 },
+        width = 1000 - margin.left - margin.right,
+        height = 600 - margin.top - margin.bottom;
+
+      const svg = d3
+        .select("#chart")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      d3.csv("domain_6.csv")
+        .then(function (data) {
+          data.forEach((d) => {
+            d.Sales = +d.Sales;
+            d.Profit = +d.Profit;
+          });
+
+          const categoryData = d3.group(data, (d) => d["Product Category"]);
+
+          const dataArr = Array.from(categoryData, ([key, value]) => ({
+            ProductCategory: key,
+            TotalSales: d3.sum(value, (d) => d.Sales),
+            TotalProfit: d3.sum(value, (d) => d.Profit),
+          }));
+
+          dataArr.sort((a, b) => b.TotalSales - a.TotalSales);
+
+          const x = d3
+            .scaleBand()
+            .domain(dataArr.map((d) => d.ProductCategory))
+            .range([0, width])
+            .padding(0.3);
+
+          const y = d3
+            .scaleLinear()
+            .domain([
+              0,
+              d3.max(dataArr, (d) => Math.max(d.TotalSales, d.TotalProfit)),
+            ])
+            .nice()
+            .range([height, 0]);
+
+          svg
+            .append("g")
+            .attr("class", "x-axis")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x))
+            .selectAll("text")
+            .attr("y", 10)
+            .attr("x", 9)
+            .attr("dy", ".35em")
+            .attr("transform", "rotate(0)")
+            .style("text-anchor", "start");
+
+          svg
+            .append("g")
+            .attr("class", "y-axis")
+            .call(d3.axisLeft(y))
+            .append("text")
+            .attr("y", -50)
+            .attr("x", -30)
+            .attr("text-anchor", "end")
+            .attr("fill", "#000")
+            .text("Amount");
+
+          svg
+            .selectAll(".bar-sales")
+            .data(dataArr)
+            .enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", (d) => x(d.ProductCategory))
+            .attr("y", (d) => y(d.TotalSales))
+            .attr("width", x.bandwidth() / 2)
+            .attr("height", (d) => height - y(d.TotalSales))
+            .attr("fill", "steelblue")
+            .append("title")
+            .text(
+              (d) =>
+                `Category: ${d.ProductCategory}\nSales: ${d.TotalSales.toFixed(
+                  2
+                )}`
+            );
+
+          svg
+            .selectAll(".bar-profit")
+            .data(dataArr)
+            .enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", (d) => x(d.ProductCategory) + x.bandwidth() / 2)
+            .attr("y", (d) => y(d.TotalProfit))
+            .attr("width", x.bandwidth() / 2)
+            .attr("height", (d) => height - y(d.TotalProfit))
+            .attr("fill", "orange")
+            .append("title")
+            .text(
+              (d) =>
+                `Category: ${
+                  d.ProductCategory
+                }\nProfit: ${d.TotalProfit.toFixed(2)}`
+            );
+
+          svg
+            .append("text")
+            .attr("text-anchor", "middle")
+            .attr("x", width / 2)
+            .attr("y", height + margin.bottom - 10)
+            .text("Product Category");
+
+          svg
+            .append("text")
+            .attr("x", -margin.top / 2)
+            .attr("y", -margin.left / 2)
+            .attr("text-anchor", "middle")
+            .attr("transform", "rotate(-90)")
+            .text("Sales and Profit ($)");
+
+          svg
+            .append("text")
+            .attr("x", width / 2)
+            .attr("y", -margin.top / 2)
+            .attr("text-anchor", "middle")
+            .style("font-size", "16px")
+            .style("text-decoration", "underline")
+            .text("Sales and Profit Comparison by Product Category");
+
+          const formatValue = (value) =>
+            value >= 1000000
+              ? (value / 1000000).toFixed(1) + "M"
+              : (value / 1000).toFixed(0) + "K";
+
+          svg
+            .selectAll(".bar-sales")
+            .data(dataArr)
+            .enter()
+            .append("text")
+            .attr("class", "bar-label")
+            .attr("x", (d) => x(d.ProductCategory) + x.bandwidth() / 4)
+            .attr("y", (d) => y(d.TotalSales) - 5)
+            .attr("text-anchor", "middle")
+            .text((d) => formatValue(d.TotalSales))
+            .style("fill", "black");
+
+          svg
+            .selectAll(".bar-profit")
+            .data(dataArr)
+            .enter()
+            .append("text")
+            .attr("class", "bar-label")
+            .attr("x", (d) => x(d.ProductCategory) + (3 * x.bandwidth()) / 4)
+            .attr("y", (d) => y(d.TotalProfit) - 5)
+            .attr("text-anchor", "middle")
+            .text((d) => formatValue(d.TotalProfit))
+            .style("fill", "black");
+
+          const legend = svg
+            .append("g")
+            .attr("class", "legend")
+            .attr(
+              "transform",
+              `translate(${width / 2 - 75}, ${height + margin.bottom - 40})`
+            );
+
+          legend
+            .append("rect")
+            .attr("x", 0)
+            .attr("y", 0)
+            .attr("width", 10)
+            .attr("height", 10)
+            .attr("fill", "steelblue");
+
+          legend
+            .append("text")
+            .attr("x", 20)
+            .attr("y", 10)
+            .text("Total Sales")
+            .attr("alignment-baseline", "middle");
+
+          legend
+            .append("rect")
+            .attr("x", 100)
+            .attr("y", 0)
+            .attr("width", 10)
+            .attr("height", 10)
+            .attr("fill", "orange");
+
+          legend
+            .append("text")
+            .attr("x", 120)
+            .attr("y", 10)
+            .text("Total Profit")
+            .attr("alignment-baseline", "middle");
+        })
+        .catch(function (error) {
+          console.log(error);
+        });
+    </script>
+  </body>
+</html>

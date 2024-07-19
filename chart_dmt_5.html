@@ -1,49 +1,115 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>D3.js Example</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phân tích hiệu quả của các phương thức vận chuyển</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      .bar {
+        fill: steelblue;
+      }
+      .bar:hover {
+        fill: brown;
+      }
+      .axis-label {
+        font-size: 12px;
+      }
+    </style>
   </head>
   <body>
+    <h2>Phân tích hiệu quả của các phương thức vận chuyển</h2>
+    <div id="chart"></div>
+
     <script>
-      const width = 500;
-      const height = 300;
+      // Đọc dữ liệu từ file txt
+      d3.dsv(",", "domain_5.txt", (d) => {
+        return {
+          mode: d["Ship Mode"],
+          cost: +d["Shipping Cost"],
+          sales: +d["Sales"],
+        };
+      }).then((data) => {
+        // Tính toán hiệu quả (sales/cost ratio)
+        const efficiencyData = d3.rollup(
+          data,
+          (v) => d3.sum(v, (d) => d.sales) / d3.sum(v, (d) => d.cost),
+          (d) => d.mode
+        );
 
-      // Tạo SVG container
-      const svg = d3
-        .select("body")
-        .append("svg")
-        .attr("width", width)
-        .attr("height", height)
-        .style("border", "1px solid black");
+        const chartData = Array.from(efficiencyData, ([mode, efficiency]) => ({
+          mode,
+          efficiency,
+        }));
 
-      const data = [10, 20, 30, 40, 50];
-      const barHeight = 20;
+        // Cài đặt kích thước và margin
+        const margin = { top: 30, right: 30, bottom: 70, left: 60 };
+        const width = 600 - margin.left - margin.right;
+        const height = 400 - margin.top - margin.bottom;
 
-      // Thêm các thanh vào SVG
-      svg
-        .selectAll("rect")
-        .data(data)
-        .enter()
-        .append("rect")
-        .attr("width", (d) => d)
-        .attr("height", barHeight - 1)
-        .attr("y", (d, i) => i * barHeight)
-        .attr("fill", "steelblue");
+        // Tạo SVG
+        const svg = d3
+          .select("#chart")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+          .attr("transform", `translate(${margin.left},${margin.top})`);
 
-      // Thêm nhãn vào mỗi thanh
-      svg
-        .selectAll("text")
-        .data(data)
-        .enter()
-        .append("text")
-        .attr("x", (d) => d + 3)
-        .attr("y", (d, i) => i * barHeight + barHeight / 2)
-        .attr("dy", ".35em")
-        .text((d) => d)
-        .attr("font-family", "sans-serif")
-        .attr("font-size", "11px")
-        .attr("fill", "black");
+        // Thang X
+        const x = d3
+          .scaleBand()
+          .range([0, width])
+          .domain(chartData.map((d) => d.mode))
+          .padding(0.2);
+
+        svg
+          .append("g")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(x))
+          .selectAll("text")
+          .attr("transform", "translate(-10,0)rotate(-45)")
+          .style("text-anchor", "end");
+
+        // Thang Y
+        const y = d3
+          .scaleLinear()
+          .domain([0, d3.max(chartData, (d) => d.efficiency)])
+          .range([height, 0]);
+
+        svg.append("g").call(d3.axisLeft(y));
+
+        // Vẽ các cột
+        svg
+          .selectAll("mybar")
+          .data(chartData)
+          .enter()
+          .append("rect")
+          .attr("x", (d) => x(d.mode))
+          .attr("y", (d) => y(d.efficiency))
+          .attr("width", x.bandwidth())
+          .attr("height", (d) => height - y(d.efficiency))
+          .attr("class", "bar");
+
+        // Thêm tiêu đề trục X
+        svg
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("text-anchor", "middle")
+          .attr("x", width / 2)
+          .attr("y", height + margin.bottom - 5)
+          .text("Phương thức vận chuyển");
+
+        // Thêm tiêu đề trục Y
+        svg
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("text-anchor", "middle")
+          .attr("transform", "rotate(-90)")
+          .attr("y", -margin.left + 20)
+          .attr("x", -height / 2)
+          .text("Hiệu quả (Doanh số / Chi phí)");
+      });
     </script>
   </body>
 </html>
