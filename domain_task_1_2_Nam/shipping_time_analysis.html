@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Average Shipping Time by Month</title>
     <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
       .bar {
         fill: steelblue;
@@ -40,21 +41,60 @@
   </head>
   <body>
     <div id="chart-container">
-      <div class="chart-title">Thời gian giao hàng trung bình theo tháng</div>
+      <div class="chart-title">
+        Thời gian giao hàng trung bình theo tháng trong nửa đầu năm 2015 ở Mỹ
+      </div>
       <div id="chart"></div>
     </div>
 
     <script>
-      // Dữ liệu đã xử lý từ Python
-      const data = [
-        { YearMonth: "2015-01", "Shipping Time": 2.04 },
-        { YearMonth: "2015-02", "Shipping Time": 1.93 },
-        { YearMonth: "2015-03", "Shipping Time": 1.81 },
-        { YearMonth: "2015-04", "Shipping Time": 1.96 },
-        { YearMonth: "2015-05", "Shipping Time": 1.8 },
-        { YearMonth: "2015-06", "Shipping Time": 2.1 },
-        // ... thêm các tháng khác ở đây
-      ];
+      // Đường dẫn tới file Excel
+      const excelFilePath = "./SuperStoreUS-2015.xlsx";
+
+      // Hàm để tải file Excel
+      async function loadExcelFile(filePath) {
+        const response = await fetch(filePath);
+        const data = await response.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+        return workbook;
+      }
+
+      // Xử lý dữ liệu từ file Excel
+      function processData(workbook) {
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        // Chuyển đổi dữ liệu sang định dạng dễ xử lý
+        const orders = json.map((order) => ({
+          orderDate: new Date(
+            (order["Order Date"] - (25567 + 2)) * 86400 * 1000
+          ),
+          shipDate: new Date((order["Ship Date"] - (25567 + 2)) * 86400 * 1000),
+          shippingTime:
+            (new Date((order["Ship Date"] - (25567 + 2)) * 86400 * 1000) -
+              new Date((order["Order Date"] - (25567 + 2)) * 86400 * 1000)) /
+            (1000 * 60 * 60 * 24),
+        }));
+
+        // Tính thời gian giao hàng trung bình theo tháng
+        const shippingTimesByMonth = d3
+          .rollups(
+            orders,
+            (v) => d3.mean(v, (d) => d.shippingTime),
+            (d) => d3.timeFormat("%Y-%m")(d.orderDate)
+          )
+          .map(([month, avgShippingTime]) => ({
+            YearMonth: month,
+            "Shipping Time": avgShippingTime,
+          }));
+
+        // Sắp xếp theo tháng tăng dần
+        shippingTimesByMonth.sort(
+          (a, b) => new Date(a.YearMonth) - new Date(b.YearMonth)
+        );
+
+        return shippingTimesByMonth;
+      }
 
       // Vẽ biểu đồ
       function renderChart(data) {
@@ -84,7 +124,7 @@
 
         const y = d3
           .scaleBand()
-          .domain(data.map((d) => d["YearMonth"]))
+          .domain(data.map((d) => d["YearMonth"].substring(5))) // Chỉ lấy tháng
           .range([height, 0])
           .padding(0.3);
 
@@ -96,7 +136,7 @@
           .append("rect")
           .attr("class", "bar")
           .attr("x", 0)
-          .attr("y", (d) => y(d["YearMonth"]))
+          .attr("y", (d) => y(d["YearMonth"].substring(5)))
           .attr("width", (d) => x(d["Shipping Time"]))
           .attr("height", y.bandwidth());
 
@@ -108,7 +148,7 @@
           .append("text")
           .attr("class", "label")
           .attr("x", (d) => x(d["Shipping Time"]) + 3)
-          .attr("y", (d) => y(d["YearMonth"]) + y.bandwidth() / 2)
+          .attr("y", (d) => y(d["YearMonth"].substring(5)) + y.bandwidth() / 2)
           .attr("dy", ".35em")
           .attr("text-anchor", "start")
           .text((d) => d["Shipping Time"].toFixed(2));
@@ -141,8 +181,11 @@
           .text("Tháng");
       }
 
-      // Vẽ biểu đồ với dữ liệu đã xử lý
-      renderChart(data);
+      // Tải file Excel và vẽ biểu đồ
+      loadExcelFile(excelFilePath).then((workbook) => {
+        const data = processData(workbook);
+        renderChart(data);
+      });
     </script>
   </body>
 </html>
